@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>주간행사 일정 관리 위젯</title>
+  <!-- Google Fonts: Outfit for numbers/labels, Noto Sans KR for clean Korean layout -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Tesseract.js CDN for Client-side OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body class="dashboard-mode">
+
+  <!-- Desktop App Container -->
+  <div class="app-container" id="appContainer">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="logo-icon"><i class="fa-solid fa-calendar-week"></i></span>
+        <div class="logo-text">
+          <h1>주간 일정 관리 <span class="badge-widget">Widget</span></h1>
+          <p class="tagline">바탕화면 최적화 주간 행사 일정표</p>
+        </div>
+      </div>
+      
+      <div class="header-right">
+        <!-- Widget Mode Toggle Button -->
+        <button id="btnToggleMode" class="btn-secondary" title="화면 모드 전환 (대시보드 / 위젯)">
+          <i class="fa-solid fa-table-cells-large"></i> <span class="btn-text">위젯 모드</span>
+        </button>
+        <!-- Settings Button -->
+        <button id="btnOpenSettings" class="btn-icon" title="API 설정 및 정보">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Section -->
+    <main class="app-main">
+      
+      <!-- Left Panel: Upload, OCR, API Info (Hidden in Widget Mode) -->
+      <aside class="control-panel" id="controlPanel">
+        <!-- Drag & Drop Upload Card -->
+        <div class="card upload-card" id="dropZone">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-file-image"></i> 일정 이미지 파싱</h3>
+          </div>
+          <div class="upload-inner">
+            <div class="upload-icon-wrapper">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+            </div>
+            <h4>이미지 드래그 & 드롭</h4>
+            <p class="upload-hint">
+              행사 일정 캡처본(PNG, JPG 등)을 여기에 끌어다 놓거나 아래 버튼을 눌러 선택하세요.
+            </p>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            <button class="btn-primary" id="btnSelectImage">
+              <i class="fa-solid fa-image"></i> 이미지 선택
+            </button>
+          </div>
+        </div>
+
+        <!-- OCR & AI Progress Card -->
+        <div class="card status-card" id="statusCard" style="display: none;">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-robot"></i> 데이터 파싱 상태</h3>
+            <button class="btn-close-sm" id="btnCancelProcessing"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="status-inner">
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="status-info">
+              <span id="statusLabel">분석 대기 중...</span>
+              <span id="progressText">0%</span>
+            </div>
+            <div class="ocr-preview-box" id="ocrPreviewBox" style="display: none;">
+              <h5>추출된 텍스트 원본:</h5>
+              <textarea id="rawOcrText" readonly></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Guide Card -->
+        <div class="card guide-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-lightbulb"></i> 사용 팁</h3>
+          </div>
+          <div class="guide-inner">
+            <ul>
+              <li><strong>단독 실행 지원:</strong> 설치 없이 더블클릭만으로 언제든 바로 실행됩니다.</li>
+              <li><strong>스마트 파싱:</strong> 이미지 속 일자, 시간, 행사명, 장소 등을 자동 인식하여 채워줍니다.</li>
+              <li><strong>위젯 모드:</strong> 상단 <code>위젯 모드</code> 버튼을 누르면 바탕화면 한쪽에 깔끔하게 배치하기 좋은 미니 뷰로 바뀝니다.</li>
+              <li><strong>자동 저장:</strong> 작성한 일정과 메모는 로컬 스토리지에 자동 보존됩니다.</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Panel: Schedule Table & Operations -->
+      <section class="schedule-panel">
+        
+        <!-- Week Navigation Bar -->
+        <div class="nav-bar">
+          <div class="nav-left">
+            <button id="btnPrevWeek" class="btn-nav" title="이전 주"><i class="fa-solid fa-chevron-left"></i></button>
+            <button id="btnToday" class="btn-nav-text">오늘</button>
+            <button id="btnNextWeek" class="btn-nav" title="다음 주"><i class="fa-solid fa-chevron-right"></i></button>
+            <h2 id="currentWeekTitle" class="week-title">2026년 07월 4주차</h2>
+          </div>
+          <div class="nav-right">
+            <button id="btnExportCsv" class="btn-secondary-sm" title="CSV 내보내기">
+              <i class="fa-solid fa-file-export"></i> <span class="btn-text">엑셀 백업(CSV)</span>
+            </button>
+            <button id="btnImportCsv" class="btn-secondary-sm" title="CSV 불러오기">
+              <i class="fa-solid fa-file-import"></i> <span class="btn-text">불러오기</span>
+            </button>
+            <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+          </div>
+        </div>
+
+        <!-- Desktop Schedule Card Grid / Table -->
+        <div class="card table-card">
+          <div class="table-container">
+            <table class="schedule-table" id="scheduleTable">
+              <thead>
+                <tr>
+                  <th style="width: 14%;">일자(요일)</th>
+                  <th style="width: 10%;">시간</th>
+                  <th style="width: 20%;">행사명</th>
+                  <th style="width: 15%;">행사장소</th>
+                  <th style="width: 12%;">VIP(참석자)</th>
+                  <th style="width: 12%;">주관팀</th>
+                  <th style="width: 17%;">메모</th>
+                </tr>
+              </thead>
+              <tbody id="scheduleTableBody">
+                <!-- Rows will be injected by JavaScript -->
+              </tbody>
+            </table>
+            
+            <!-- Empty State for Schedule -->
+            <div class="empty-schedule" id="emptySchedule" style="display: none;">
+              <i class="fa-regular fa-calendar-plus"></i>
+              <p>이번 주에 등록된 일정이 없습니다.</p>
+              <button class="btn-primary-sm" id="btnCreateFirstEvent">첫 행사 등록하기</button>
+            </div>
+          </div>
+
+          <!-- Table Footer / CRUD buttons -->
+          <div class="table-footer">
+            <button id="btnAddRow" class="btn-primary">
+              <i class="fa-solid fa-plus"></i> 일정 추가
+            </button>
+            <button id="btnClearWeek" class="btn-danger-outline">
+              <i class="fa-solid fa-trash-can"></i> 이번 주 비우기
+            </button>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- API Key & App Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-gear"></i> 앱 설정 및 연동</h3>
+        <button class="btn-close" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="geminiApiKey"><strong>Gemini AI API Key (선택)</strong></label>
+          <input type="password" id="geminiApiKey" placeholder="AI 일정 이미지 정밀 추출용 API 키 입력">
+          <p class="form-help">
+            키를 등록하면 <code>Gemini 1.5 Flash</code>를 사용해 흐릿하거나 정렬되지 않은 사진에서도 시간, 장소, VIP, 메모 등을 완벽하게 파싱하여 표에 넣어줍니다. API 키는 로컬 브라우저 보안 저장소에만 보관됩니다.
+          </p>
+        </div>
+        <div class="info-section">
+          <h4><i class="fa-solid fa-info-circle"></i> 단독 바탕화면 위젯 구동 가이드</h4>
+          <p>이 웹 앱은 바탕화면 위젯처럼 독립적으로 사용할 수 있습니다.</p>
+          <ol>
+            <li><strong>브라우저 바로가기:</strong> 브라우저에서 이 <code>index.html</code> 파일을 즐겨찾기에 등록하거나 바로가기를 바탕화면에 빼서 사용합니다.</li>
+            <li><strong>바탕화면 위젯화 (Electron):</strong> 컴포넌트 내 가이드를 활용해 투명 바탕화면 미니 뷰 앱으로 컴파일 없이 띄울 수 있습니다.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnResetSettings">설정 초기화</button>
+        <button class="btn-primary" id="btnSaveSettings">설정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR Result Verification and Mapping Modal -->
+  <div class="modal-overlay" id="ocrResultModal">
+    <div class="modal-container modal-lg">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI/OCR 추출 일정 검토</h3>
+        <button class="btn-close" id="btnCloseOcrModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          이미지에서 일정 데이터를 분석했습니다. 일정에 반영하기 전에 각 필드를 검토하고 수정하세요.
+        </p>
+        
+        <div class="ocr-split-view">
+          <!-- Left side: Source Preview -->
+          <div class="ocr-source-preview">
+            <h5>분석한 이미지</h5>
+            <div class="img-frame">
+              <img id="ocrSourceImg" src="" alt="OCR Source">
+            </div>
+          </div>
+          
+          <!-- Right side: Editable parsed items -->
+          <div class="ocr-parsed-list">
+            <h5>검출된 일정 목록 (<span id="parsedItemsCount">0</span>건)</h5>
+            <div class="parsed-rows-container" id="parsedRowsContainer">
+              <!-- Item cards will be injected by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnRejectOcr">취소</button>
+        <button class="btn-primary" id="btnAcceptOcr"><i class="fa-solid fa-calendar-check"></i> 주간 일정표에 적용</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- JS Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
